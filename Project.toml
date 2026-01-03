@@ -1,0 +1,13 @@
+name = "Apollo"
+uuid = "d07ff59c-5db4-4a8a-acb9-22af8761d4ca"
+authors = ["Lachlan Whyborn lachlan.s.whyborn@gmail.com"]
+version = "0.0.1"
+
+[compat]
+julia = "1.10.10"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
