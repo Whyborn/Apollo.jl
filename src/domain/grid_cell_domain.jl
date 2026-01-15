@@ -8,11 +8,11 @@
 
 Define a grid cell domain.
 """
-struct GridCellDomain{T} <: Domain{T}
-    x::Vector{T}
-    y::Vector{T}
+struct GridCellDomain <: Domain
+    x::Vector
+    y::Vector
     mask::Matrix{Bool}
-    areas::Matrix{T}
+    areas::Matrix
 end
 
 """
@@ -30,7 +30,7 @@ function GridCellDomain(lons::Vector{T}, lats::Vector{T}, mask)
     lon_bnds = [(x - dx, x + dx) for x in lons]
     lat_bnds = [(y - dy, y + dy) for y in lats]
 
-    areas = [earth_radius * abs(lon_bnd[2] - lon_bnd[1]) * abs(sin(lat_bnd[2]) - sin(lat_bnd[1])) for (lon_bnd, lat_bnd) in zip(lon_bnds, lat_bnds)]
+    areas = [EARTH_RADIUS * abs(lon_bnd[2] - lon_bnd[1]) * abs(sin(lat_bnd[2]) - sin(lat_bnd[1])) for (lon_bnd, lat_bnd) in zip(lon_bnds, lat_bnds)]
 
     GridCellDomain(lons, lats, mask, areas)
 end

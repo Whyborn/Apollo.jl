@@ -1,5 +1,5 @@
 """
-    TemporalForcing{N, T, DT, AggType}
+    AncillaryForcing{N, T, DT, AggType}
         CDM_var::String
         preload::Int
         times::Vector{DT}
@@ -10,7 +10,7 @@
 A wrapper around a Common Data Model file to facilitate agnostic access patterns within the model.
 """
 
-mutable struct TemporalForcing{VarType, T, N, DateType, AggType}
+mutable struct CDMWrapper{VarType, T, N, DateType, AggType}
     CDM_var::VarType
     preload::Int
     times::Vector{DateType}

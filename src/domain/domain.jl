@@ -1,9 +1,9 @@
 abstract type Domain{T} end
 
-function define_on_domain(vars::NTuple{N, Symbol}, domain::Domain{T}) where {T}
+function define_on_domain(vars::NTuple{N, Symbol}, domain::Domain{T}, dims=()) where {T}
     nvalues = count(domain)
 
-    arr = zeros(T, nvalues)
+    arr = zeros(T, (nvalues, dims...))
 
     # A named tuple of var => arr pairs, used to construct the ComponentVector
     t = NamedTuple{vars}(arr)
