@@ -19,4 +19,4 @@ macro UrbanType(name, urban_traits...)
         $name
     end)
 end
-
+export @UrbanType, UrbanSurface

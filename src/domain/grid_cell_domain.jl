@@ -8,11 +8,11 @@
 
 Define a grid cell domain.
 """
-struct GridCellDomain <: Domain
-    x::Vector
-    y::Vector
+struct GridCellDomain{T} <: Domain{T}
+    x::Vector{T}
+    y::Vector{T}
     mask::Matrix{Bool}
-    areas::Matrix
+    areas::Matrix{T}
 end
 
 """
@@ -20,7 +20,7 @@ end
 
 Create a new grid cell domain from the given mask and lon/lat coordinates.
 """
-function GridCellDomain(lons::Vector{T}, lats::Vector{T}, mask)
+function GridCellDomain(lons::Vector{T}, lats::Vector{T}, mask) where {T}
     lons = deg2rad.(lons)
     lats = deg2rad.(lats)
 
@@ -34,5 +34,4 @@ function GridCellDomain(lons::Vector{T}, lats::Vector{T}, mask)
 
     GridCellDomain(lons, lats, mask, areas)
 end
-
-count(domain::GridCellDomain) = count(domain.mask)
+export GridCellDomain

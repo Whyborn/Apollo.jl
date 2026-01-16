@@ -1,13 +1,11 @@
 # Set the master surface type, which will be used in the respective tile types
-abstract type SurfaceType end
-
 """
     SurfaceTypeDomain{N, T} <: Domain{T}
 
 Domain for a specific surface type.
 """
 struct SurfaceTypeDomain{N, T} <: Domain{T}
-    vegetation_types::NTuple{N, DataType}
+    tile_types::NTuple{N, DataType}
     land_ids::NTuple{N, Vector{Int}}
     fractions::NTuple{N, Vector{T}}
 end
@@ -30,27 +28,5 @@ function VegetatedSurfaceDomain(surface_fractions::Array{T, 3}, mapping::Dict{In
     land_ids = getindex.(split_domains, 1)
     fracs = getindex.(split_domains, 2)
 
-    SurfaceTypeDomain{length(vegetation_types), T}(surface_types, land_ids, fracs)
+    SurfaceTypeDomain{length(surface_types), T}(surface_types, land_ids, fracs)
 end
-
-function read_surface_traits(allowed_traits, passed_traits)
-    traits = Dict()
-    for trait_spec in PFT_traits
-        if trait_spec.head == :(=)
-            if trait_spec.args[1] in keys(PFT_ALLOWED_TRAITS)
-                trait_options = PFT_ALLOWED_TRAITS[trait_spec.args[1]]
-                if trait_spec.args[2] in keys(trait_options)
-                    traits[trait_spec.args[1]] = trait_options[trait_spec.args[2]]
-                else
-                    @error "$(trait_spec.args[2]) is an unrecognised value for the $(trait_spec.args[1]) trait. Options are $(keys(trait_options))."
-                end
-            else
-                @error "$(trait_spec.args[1]) is an unrecognised PFT trait- must be one of $(keys(PFT_ALLOWED_TRAITS))"
-            end
-        end
-    end
-
-    traits
-end
-            
-

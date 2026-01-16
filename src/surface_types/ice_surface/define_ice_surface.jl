@@ -19,4 +19,4 @@ macro IceType(name, ice_traits...)
         $name
     end)
 end
-
+export @IceType, IceSurface

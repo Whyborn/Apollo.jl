@@ -19,3 +19,4 @@ macro WaterType(name, water_traits...)
         $name
     end)
 end
+export @WaterType, WaterSurface

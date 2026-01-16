@@ -32,3 +32,4 @@ macro PFT(name, PFT_traits...)
         $name
     end)
 end
+export @PFT, VegetatedSurface
