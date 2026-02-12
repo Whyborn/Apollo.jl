@@ -16,7 +16,7 @@ macro UrbanType(name, urban_traits...)
     esc(quote
         struct $(name) <: UrbanSurface end
 
-        $name
+        $name()
     end)
 end
 export @UrbanType, UrbanSurface

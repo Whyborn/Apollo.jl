@@ -16,7 +16,7 @@ macro WaterType(name, water_traits...)
     esc(quote
         struct $(name) <: WaterSurface end
 
-        $name
+        $name()
     end)
 end
 export @WaterType, WaterSurface

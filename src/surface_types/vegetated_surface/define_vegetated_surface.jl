@@ -29,7 +29,7 @@ macro PFT(name, PFT_traits...)
 
         Phenology(::Type{$(name)}) = $traits[:phenology]
 
-        $name
+        $name()
     end)
 end
 export @PFT, VegetatedSurface

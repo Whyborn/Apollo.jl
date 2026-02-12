@@ -16,7 +16,7 @@ macro IceType(name, ice_traits...)
     esc(quote
         struct $(name) <: IceSurface end
 
-        $name
+        $name()
     end)
 end
 export @IceType, IceSurface
