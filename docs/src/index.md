@@ -2,10 +2,57 @@
 
 Apollo.jl is a toy biosphere code I created to prove it's possible write climate models that aren't terrible to use.
 
-## Usage
+## Glossary of Terms
 
-## Surface Classes
+### Surface Classes and Traits
 
+The fundamental data structure that the model is built on are **Surface Classes**. These broadly classify the type of surface for the given computational unit. The surface classes available are **Vegetated** (i.e. PFT), **Water**, **Ice** and **Urban**. The surface classes are specialised by **Surface Tiles**, each of which define a set of **Traits** required for the parent class. The behaviour of a specific tile is defined based on its parent class and its traits, rather than the class itself. The surface tiles are not defined by the model- these are defined by the user in the simulation set up.
+
+#### Implementation
+
+The model defines the abstract type `SurfaceClass`, with the surface being defined as subclasses of `SurfaceClass`.
+
+```julia
+abstract type VegetatedSurface <: SurfaceClass end
+abstract type WaterSurface <: SurfaceClass end
+abstract type IceSurface <: SurfaceClass end
+abstract type UrbanSurface <: SurfaceClass end
+```
+
+The traits are defined for each surface class by defining a parent type for the trait, and the options for the given trait. For example, for the vegetated surface, each tile must define the PFT's phenology:
+
+```julia
+abstract type Phenology end
+struct Evergreen <: Phenology end
+struct Deciduous <: Phenology end
+```
+
+When defining a new `VegetatedSurface` tile, the phenology of the new tile must be specified with:
+
+```julia
+struct ExampleVegetatedTile <: VegetatedSurface end
+phenology(::Type{ExampleVegetatedTile}) = Evergreen()
+```
+
+### Domain
+
+The **Domain** details the computational units which comprise the simulation. The domain contains vectors which describe the latitudes and longitudes for each grid cell in the domain, as well as the bounds of each cell. These vectors do *not* necessarily describe a grid- each `(lat, lon)` pair describes the centre of a single cell, and the vectors are always of the same length. The domain also describes the surface of each cell. This is stored by a trio of tuples:
+
+1. A tuple of each of the surface tiles used in the simulation.
+2. A tuple of integer vectors, stating which cells contain some fraction of the corresponding surface subclass.
+3. A tuple of float vectors, stating the fraction of the cell occupied by the given surface subclass.
+
+The domain description is consistent between spatial and site runs.
+
+### Model Inputs
+
+There are two classes of inputs to the model: **Parameters** and **Forcing**. Parameters are values that remain the same throughout the simulation. Parameters can be either **SpatialParameters**, defined based on some input array or **TileParameters**, defined based on the current tile.
+
+Forcings have both a time and source definition. The time can be either **TrueTime**, which uses the real model time, or **CyclicTime**, which repeated forcing from a specified time period (this includes seasonal forcing). The source can either **FunctionSource**, which takes the forcing from a user-defined function, or **FileSource**, which takes forcing from any `CommonDataModel` file.
+
+### Model State
+
+The **Model State** is comprised of two types of variables: **State Variables**
 The model is designed to be configurable by users from the ground up. The model utilises the classic surface class discretization model utilised in many land models. Specifically, it follows the approach of the Community Land Model, in that there are a small number of distinct overarching surface classes which are defined by the model: **Plant Functional Types (PFTs)**, **Water**, **Urban** and **Ice**. Each of these surface classes encompasses some number of sub-classes, which are created by the user. Each top level class has a fixed set of **traits** that must be specified when the sub-class is declared.
 
 ```
@@ -24,14 +71,27 @@ RadiationParameters(::EvergreenBroadleaf) = RadiationParameters(; kwargs...)
 
 The `kwargs` of `RadiationParameters` are the parameters required for the science module. Any parameters not specified will be given a default for the top level class, which are typically values that will allow the model to run, but typically it's not possible to have default parameter values which are accurate for every sub-class.
 
-## Physics Definition
+## Model State
 
-The model physics is designed to be interoperable as much as possible. The physics is separate into a series of modules e.g. radiation, soil hydraulics and thermodynamics. The top level module doesn't define any physics- only specifies *what* the module does, rather than how it does it. Each module defines:
+There are 4 classifications of data which control the model. These terms are referred to throughout the documentation.
 
-* The minimum set of state variables required for the module.
-* The minimum set of per-PFT and spatial parameters required for the module.
-* The minimum set of methods that must be defined for any realisation of the module.
-* The dependencies of the module.
+1. **Parameters**: Data that remains fixed in time. This can be specified per class, sub-class or trait, or spatially i.e. `p(t)=p(C)`, where `C` is the simulation configuration. Note that this means there are situations where parameters on a tile may change, when the characterization of that tile changes e.g. due to vegetation dynamics.
+2. **Forcing**: Data that varies in time i.e. `F(t)=F(t,C)`. This can be a true time series e.g. weather forcing or periodic e.g. seasonal.
+3. **State variables**: These are specifically variables that have rates of change associated with them i.e. `U(t+1) = U(t) + dU(t) * Δt`.
+4. **Dependent variables**: These are variables which are inferred from the current state and parameters i.e. `V(t)=V(U(t), p)`.
+
+## Model Science
+
+The model science is designed to be extendable. The physics is separate into *modules*, each representing the *what* regarding an aspect of the science. Each *module* is the parent of one or more *implementations*, which actually describe the *how* for the aspect of science. The module specifies what methods and variables each of the implementations must define- it effectively makes a promise that these are the things that will be available for other modules to use. This means the module must define:
+
+* The minimum set of state and dependent variables that must be defined for any implementation of the module.
+* The minimum set of methods that must be defined for any implementation of the module.
+
+The respective implementations, in addition to describing rates of change of state variables and computing dependent variables, describe how the promise made by the module is fulfilled. The implementations must define:
+
+* Any additional state or dependent variables defined by the implementation.
+* Concrete definitions for each of the methods specified by the parent module.
+
 
 ### Setting required state variables
 
@@ -39,13 +99,14 @@ When initialising a simulation, the function `create_state_variables(phys_mod, s
 
 ### Setting required parameters
 
+The required parameters specify 
 Parameters can be set in one of 3 ways:
 
 1. By association with a top level class e.g. `module_parameters(::PhysicsModule, ::PFT)`
 2. By association with a given trait e.g. `module_parameters(::PhysicsModule, ::Evergreen)`
-3. By association with a concrete class e.g. `module_parameters(::PhysicsModule, ::C3Grass)`.
+3. By association with a sub-class e.g. `module_parameters(::PhysicsModule, ::C3Grass)`.
 
-
+Association via top level class or trait should be done by the developer in the source code, while association via sub-class should be done by the user in a configuration.
 For example, the soil hydraulics module may require the state variable `volume_fraction_of_condensed_water_in_soil`, the spatial parameters `volume_fraction_of_condensed_water_in_soil_at_critical_point` and `volume_fraction_of_condensed_water_at_field_capacity` and the per-PFT parameter `volume_fraction_of_condensed_water_in_soil_at_wilting_point`. It must define the method `volume_fraction_condensed_water_at_depth(::SoilHydraulicsModel, depth)`. It does not require any other modules to be active to operate, so it has no dependencies. However, the ground water module may require the soil hydraulics module to be active to be meaningful, so soil hydraulics would be a dependency for the ground water module.
 
 The
@@ -64,19 +125,23 @@ mapping = Dict( EGBL => (1, 2),
                 C3G => 3,
                 lake => 4,
                 fixed_ice => 5
-                )
-```
+The respective implementations, in addition to describing rates of change of state variables and computing dependent variables, describe how the promise made by the module is fulfilled. The implementations must define:
 
-In this instance, land cover indices 1 and 2 will be mapped to the `EvergreenBroadleaf` class, 3 to `C3Grass`, 4 to `Lake` and 5 to `FixedIce`. Note that not every land cover index needs to be mapped to a class- any not mapped will be ignored.
-
-```
-domain = grid_cell_domain(lons, lats, fractions, mapping; normalise=false)
-```
-
-Alternatively, a `CommonDataModel` `Dataset` may be supplied, with attributes `lon`, `lat` and `land_area_fraction` as the input dataset, along with the mapping.
-
-```
-domain = grid_cell_domain(ds::Dataset, mapping; normalise=false)
-```
+* Any additional state or dependent variables defined by the implementation.
+* Concrete definitions for each of the methods specified by the parent module.
 
 
+### Setting required state variables
+
+When initialising a simulation, the function `create_state_variables(phys_mod, surface_type, sim_conf::SimConfig)` is called for each physics module and surface type that is active in the simulation. The generic specific call signature of `create_state_variables(::PhysicsModule, ::SurfaceType, ::SimConfig)` will throw an error, so every module must define a more specific signature than this. For example, there may be three existing implementations of soil hydraulics which all use the same set of state variables- these may rely on the module level implementation of `create_state_variables` i.e. `create_state_variables(::SoilHydraulicsModule, ::SimConfig). But a new implementation may add new state variables, which would require a more specific signature like `create_state_variables(::NewSoilHydraulicsModule, ::SimConfig), which would return the extended set of variables. The return type must be a `ComponentArray`.
+
+### Setting required parameters
+
+The required parameters specify 
+Parameters can be set in one of 3 ways:
+
+1. By association with a top level class e.g. `module_parameters(::PhysicsModule, ::PFT)`
+2. By association with a given trait e.g. `module_parameters(::PhysicsModule, ::Evergreen)`
+3. By association with a sub-class e.g. `module_parameters(::PhysicsModule, ::C3Grass)`.
+
+Association via top level class or trait should be done by the developer in the source code, while association via sub-class should be done by the user in a configuration.
