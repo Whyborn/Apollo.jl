@@ -44,11 +44,63 @@ The **Domain** details the computational units which comprise the simulation. Th
 
 The domain description is consistent between spatial and site runs.
 
+#### Implementation
+
+The domain is a concrete type, defined as follows:
+
+```julia
+struct Domain{T, N}
+    lons::Vector{T}                 ! Vector of grid cell centre lons for cells active in the simulation. Size M, where M is the number of active grid cells.
+    lats::Vector{T}                 ! Vector of grid cell centre lats for cells active in the simulation. Size M.
+    lon_bnds::Matrix{T}             ! Lon bounds of each grid cell active in the simulation. Size (2, M)
+    lat_bnds::Matrix{T}             ! Lon bounds of each grid cell active in the simulation. Size (2, M)
+    tiles::NTuple{N, SurfaceClass}  ! Tuple of tiles active in the simulation. N is the number of tiles used.
+    indices::NTuple{N, Vector{Int}} ! Tuple of index vectors, indicating which grid cells contain the corresponding tile.
+    fractions::NTuple{N, Vector{T}} ! Tuple of grid cell fractions, denoting what fraction each tile occupies for the specific grid cell. Vector lengths are the same as those in indices.
+end
+```
+
+This provides a uniform description for both gridded and site domain runs. The domain can be defined in multiple ways. For gridded simulations, the most common method is to pass a 3D land cover `CommonDataModel` dataset `(cover_type, lon, lat)` and a mapping from the land cover classes to the defined tiles. The land cover dataset must be CF compliant i.e. use `land_area_fraction` for the area occupied by each tile, `lon` for the longitudes and `lat` for the latitudes. The `lon_bnds` and `lat_bnds` are optional- if not detected, they will be inferred from the existing coordinates, assuming equal spacing. The mapping is a dictionary which links the defined tiles to cover types in the land cover array.
+
+```julia
+mapping = Dict(
+    EvergreenBroadleaf() => 1,
+    DeciduousBroadleaf() => (2, 3),
+    C3Grass() => 4,
+    StaticIce() => 6
+    )
+
+domain = Domain(land_cover_dataset, mapping)
+```
+
+Alternatively, the longitudes, latitudes and land cover map can be provided explicitly.
+
+```julia
+domain = Domain(lons, lats, land_cover_array::Array{T, 3}, mapping)
+```
+
+This would treat the first page of the array (i.e. `land_cover_dataset["land_cover_fraction"][1, :, :]`) as `EvergreenBroadleaf`, 2nd and 3rd pages as `DeciduousBroadleaf` (with summed area fractions), 4th as `C3Grass` and 6th as `StaticIce`. Note that this means the 5th page of the array is ignored. The total area for a grid cell is *not* normalised to 1 by default, but the keyword argument `normalise` can be set to `true` to scale the areas such that the total for a grid cell is 1.
+
+The process is similar for site simulations, except that the land cover dataset is now a 2D array of `(cover_type, sites)`.
+
 ### Model Inputs
 
 There are two classes of inputs to the model: **Parameters** and **Forcing**. Parameters are values that remain the same throughout the simulation. Parameters can be either **SpatialParameters**, defined based on some input array or **TileParameters**, defined based on the current tile.
 
 Forcings have both a time and source definition. The time can be either **TrueTime**, which uses the real model time, or **CyclicTime**, which repeated forcing from a specified time period (this includes seasonal forcing). The source can either **FunctionSource**, which takes the forcing from a user-defined function, or **FileSource**, which takes forcing from any `CommonDataModel` file.
+
+#### Implementation
+
+Each parameter must be specified as either a `SpatialParameter` or a `TileParameter` in the dictionary of parameters used by the model. A `SpatialParameter` takes an array or `CommonDataModel` dataset, with associated variable name as input. The dimensions must be compatible with the size of the domain i.e. either on the same grid as the passed land cover dataset, or have length equal to the number of sites used in a site simulation.
+
+```julia
+params = Dict()
+params[:soil_moisture_content_at_wilting] = SpatialParameter(smc_wilt_array)     # smc_wilt_array is some lon x lat array of soil moisture content at wilting data
+params[:soil_moisture_content_at_saturation] = SpatialParameter(soil_parameter_dataset, "smc_saturation")    # soil_parameter_dataset is a CommonDataModel dataset, referring to the "smc_saturation" variable.
+```
+
+If the parameter is a `TileParameter`, then there must be a function for the given parameter with signature that matches each tile in the simulation.
+
 
 ### Model State
 
