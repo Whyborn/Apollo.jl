@@ -154,6 +154,8 @@ end
 forcing[:longwave_radiation] = FunctionalForcing(lw_rad, RealTime())    ! One forcing for ice surfaces, another for all other surfaces.
 ```
 
+Note that the *behaviour* of a particular forcing is defined internally i.e. whether the forcing is an instantaneous value, like incoming radiation, or an accumulated value, like precipitation.
+
 ### Model State
 
 The **Model State** is comprised of two types of variables: **State Variables**
