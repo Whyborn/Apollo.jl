@@ -8,7 +8,7 @@ Apollo.jl is a toy biosphere code I created to prove it's possible write climate
 
 The fundamental data structure that the model is built on are **Surface Classes**. These broadly classify the type of surface for the given computational unit. The surface classes available are **Vegetated** (i.e. PFT), **Water**, **Ice** and **Urban**. The surface classes are specialised by **Surface Tiles**, each of which define a set of **Traits** required for the parent class. The behaviour of a specific tile is defined based on its parent class and its traits, rather than the class itself. The surface tiles are not defined by the model- these are defined by the user in the simulation set up.
 
-#### Implementation
+#### Surface Classes and Traits Implementation
 
 The model defines the abstract type `SurfaceClass`, with the surface being defined as subclasses of `SurfaceClass`.
 
@@ -44,12 +44,13 @@ The **Domain** details the computational units which comprise the simulation. Th
 
 The domain description is consistent between spatial and site runs.
 
-#### Implementation
+#### Domain Implementation
 
 The domain is a concrete type, defined as follows:
 
 ```julia
-struct Domain{T, N}
+struct Domain{T, N, M}
+    mask::Array{Bool, M}            ! The mask representing which points are active. Must be the same shape as the land cover fraction array.
     lons::Vector{T}                 ! Vector of grid cell centre lons for cells active in the simulation. Size M, where M is the number of active grid cells.
     lats::Vector{T}                 ! Vector of grid cell centre lats for cells active in the simulation. Size M.
     lon_bnds::Matrix{T}             ! Lon bounds of each grid cell active in the simulation. Size (2, M)
@@ -60,7 +61,7 @@ struct Domain{T, N}
 end
 ```
 
-This provides a uniform description for both gridded and site domain runs. The domain can be defined in multiple ways. For gridded simulations, the most common method is to pass a 3D land cover `CommonDataModel` dataset `(cover_type, lon, lat)` and a mapping from the land cover classes to the defined tiles. The land cover dataset must be CF compliant i.e. use `land_area_fraction` for the area occupied by each tile, `lon` for the longitudes and `lat` for the latitudes. The `lon_bnds` and `lat_bnds` are optional- if not detected, they will be inferred from the existing coordinates, assuming equal spacing. The mapping is a dictionary which links the defined tiles to cover types in the land cover array.
+This provides a uniform description for both gridded and site domain runs. The domain can be defined in multiple ways. For gridded simulations, the most common method is to pass a 3D land cover `CommonDataModel` dataset `(cover_type, lon, lat)` and a mapping from the land cover classes to the defined tiles. The land cover dataset must be CF compliant i.e. use `land_area_fraction` for the area occupied by each tile, `lon` for the longitudes and `lat` for the latitudes. The `lon_bnds` and `lat_bnds` are optional- if not detected, they will be inferred from the existing coordinates, assuming equal spacing. The mapping is a dictionary which links the defined tiles to cover types in the land cover array. By default, all points with a non-zero land area fraction are included, but a mask can be passed as an optional argument, which can be used to switch off points as desired. This applies for gridded or site simulations.
 
 ```julia
 mapping = Dict(
@@ -87,9 +88,11 @@ The process is similar for site simulations, except that the land cover dataset 
 
 There are two classes of inputs to the model: **Parameters** and **Forcing**. Parameters are values that remain the same throughout the simulation. Parameters can be either **SpatialParameters**, defined based on some input array or **TileParameters**, defined based on the current tile.
 
-Forcings have both a time and source definition. The time can be either **TrueTime**, which uses the real model time, or **CyclicTime**, which repeated forcing from a specified time period (this includes seasonal forcing). The source can either **FunctionSource**, which takes the forcing from a user-defined function, or **FileSource**, which takes forcing from any `CommonDataModel` file.
+Forcings have both a time and source definition. The time can be either **TrueTime**, which uses the real model time, or **CyclicTime**, which repeated forcing from a specified time period (this includes seasonal forcing). The source can either **FunctionalForcing**, which takes the forcing from a user-defined function, or **FromFileForcing**, which takes forcing from any `CommonDataModel` file.
 
-#### Implementation
+#### Model Inputs Implementation
+
+##### Parameters
 
 Each parameter must be specified as either a `SpatialParameter` or a `TileParameter` in the dictionary of parameters used by the model. A `SpatialParameter` takes an array or `CommonDataModel` dataset, with associated variable name as input. The dimensions must be compatible with the size of the domain i.e. either on the same grid as the passed land cover dataset, or have length equal to the number of sites used in a site simulation.
 
@@ -99,8 +102,57 @@ params[:soil_moisture_content_at_wilting] = SpatialParameter(smc_wilt_array)    
 params[:soil_moisture_content_at_saturation] = SpatialParameter(soil_parameter_dataset, "smc_saturation")    # soil_parameter_dataset is a CommonDataModel dataset, referring to the "smc_saturation" variable.
 ```
 
-If the parameter is a `TileParameter`, then there must be a function for the given parameter with signature that matches each tile in the simulation.
+If the parameter is a `TileParameter`, then there must be a function for the given parameter with signature that matches each tile in the simulation. The call signature of the function is `<parameter_name>(tile::SurfaceClass)`. This means the configuration must define functions for each of these parameters, for each of the tiles that require that parameter. Note that that does not mean there have to be the same number of functions as tiles, just at least one with signature that matches each tile.
 
+```julia
+params[:carbon_nitrogen_ratio] = TileParameter()
+carbon_nitrogen_ratio(tile::VegetatedSurface) = value_a         ! Any vegetated surface will get this value for carbon_nitrogen_ratio, unless a more specific definition is given
+carbon_nitrogen_ratio(tile::EvergreenBroadleaf) = value_b       ! This is a more specific definition for EvergreenBroadleaf, so that tile will take this value
+carbon_nitrogen_ratio(tile::Union{C3Grass, C4Grass}) = value_c  ! The grass types will get this value, as it is more specific.
+```
+
+In this instance, the `EvergreenBroadleaf` tiles will get `value_b`, `C3Grass` and `C4Grass` will get `value_c` and any other vegetated surfaces will get `value_a`.
+
+The [module implementations](#module-implementations) specify which parameters are required for a given module.
+
+##### Forcing
+
+Each forcing must provide a time period and a source. The possible time period definitions are `TrueTime()` or `CyclicTime(start_time::DateTime, end_time::DateTime)`. Note that the `start_time` will be aligned with the beginning of the simulation, and the `end_time` is used to construct a `TimePeriod`.
+
+```julia
+seasonal_forcing = CyclicTime(DateTime(2000, 1, 1), DateTime(2001, 1, 1))       ! A seasonal forcing, with 1 year period
+preindustrial_forcing = CyclicTime(DateTime(1900, 1, 1), DateTime(1910, 1, 1))  ! A pre-industrial forcing with 10 year period
+```
+
+It is important to be aware of the effect of the calendar and leap years on the interval. The `CyclicTime` effectively sets the time for the specific forcing to be `start_time + mod(sim_time - sim_start_time, end_time - start_time)`. This may cause date offsets if leap years don't match up between the periodic interval and the real time.
+
+To specify the forcing coming from an external source, specify the `CommonDataModel` dataset (this may be a multifile dataset) and the target variable in the dataset to use, along with the time method to use. The target time must fall within the bounds of the `time` axis of the dataset. When specifying an external forcing, the interpolation method between snapshots must be specified. The possible options are:
+
+1. `Linear()`: Linearly interpolate between neighbouring snapshots.
+2. `Nearest()`: Nearest snapshot to the target time.
+3. `Previous()`: Take the most recent snapshot.
+
+The forcing must be on the same grid as the land area fraction dataset. Some examples of defining external forcing are:
+
+```julia
+forcing[:leaf_area_index] = FromFileForcing(leaf_area_index_ds, "leaf_area_index", seasonal_forcing, Linear())   ! Yearly seasonal forcing, with interpolation between time snapshots
+forcing[:precipitation] = FromFileForcing(precipitation_ds, "precipitation", preindustrial_forcing, Nearest())   ! 10 year periodic forcing, taking the nearest snapshot as reference
+forcing[:co2] = FromFileForcing(co2_ds, "atmospheric_co2", RealTime(), Previous())                               ! Real time forcing, taking the data from the previous snapshot
+```
+
+Alternatively, for idealised simulations, functional forcing can be supplied for forcing. The signature of the function called to compute forcing is `get_forcing(tile::SurfaceClass, time, lon, lat)`, where `time` is the time returned from the time period definition i.e. the true sim time for `TrueTim)` forcing, or the modulo time for `CyclicTime`, `lon` and `lat` are the coordinates from the `Domain`. The `tile` argument allows different forcing for different tiles.
+
+```julia
+function lw_rad(tile::SurfaceClass, t, x, y)
+    sin(hour(t) * 2π / 24 + x * π / 180)
+end
+
+function lw_rad(tile::IceSurface, t, x, y)
+    2 * sin(hour(t) * 2π / 24)
+end
+
+forcing[:longwave_radiation] = FunctionalForcing(lw_rad, RealTime())    ! One forcing for ice surfaces, another for all other surfaces.
+```
 
 ### Model State
 
