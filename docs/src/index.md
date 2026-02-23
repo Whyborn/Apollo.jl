@@ -4,6 +4,26 @@ Apollo.jl is a toy biosphere code I created to prove it's possible write climate
 
 ## Glossary of Terms
 
+### Time Domain
+
+The time domain is defined by a start and end time, a time step and a convergence condition. The calendar is defined by the types of the start and end times. The convergence criteria is defined by a function which accepts the model state at the start time and the model state at the end time.
+
+#### Time Domain Implementation
+
+The start and end time are `DateTime` objects, with the time step being a `TimePeriod`. The start and end times must be of the same type, and the timestep must fit evenly into a day. The convergence function must return a boolean, which decides whether to terminate the simulation at the specified end time or to continue with another iteration. The convergence function defaults to a function that returns `true`.
+
+```julia
+time_domain = TimeStepping(start_time=DateTime(1950, 1, 1), end_time=DateTime(1970, 1, 1), dt=Minutes(30))      ! A time domain that will run once from 1950 to 1969, with a 30 min time step.
+time_domain_360day = TimeStepping(start_time=DateTime360Day(1950, 1, 1), end_time=DateTime(1970, 1, 1), dt=Minutes(30))     ! Same domain, but with a 360 day calendar
+
+# A convergence condition that checks that the total difference of soil moisture is less than some specified value.
+function converge_fn(start_state, end_state)
+    sum(abs.(end_state.soil_moisture .- start_state.soil_moisture)) < 0.1
+end
+
+time_domain = TimeStepping(start_time=DateTime(1900, 1, 1), end_time=DateTime(1910, 1, 1), dt=Minutes(30), converge_fn)     ! Will repeat the 1900 to 1909 period until the converge_fn returns true
+```
+
 ### Surface Classes and Traits
 
 The fundamental data structure that the model is built on are **Surface Classes**. These broadly classify the type of surface for the given computational unit. The surface classes available are **Vegetated** (i.e. PFT), **Water**, **Ice** and **Urban**. The surface classes are specialised by **Surface Tiles**, each of which define a set of **Traits** required for the parent class. The behaviour of a specific tile is defined based on its parent class and its traits, rather than the class itself. The surface tiles are not defined by the model- these are defined by the user in the simulation set up.
@@ -111,7 +131,9 @@ carbon_nitrogen_ratio(tile::EvergreenBroadleaf) = value_b       ! This is a more
 carbon_nitrogen_ratio(tile::Union{C3Grass, C4Grass}) = value_c  ! The grass types will get this value, as it is more specific.
 ```
 
-In this instance, the `EvergreenBroadleaf` tiles will get `value_b`, `C3Grass` and `C4Grass` will get `value_c` and any other vegetated surfaces will get `value_a`.
+In this instance, the `EvergreenBroadleaf` tiles will get `value_b`, `C3Grass` and `C4Grass` will get `value_c` and any other vegetated surfaces will get `value_a`. Parameters should not be computed based off other values- anything that must be computed based on other quantities should be treated as a [dependent variable](#dependent-variables).
+
+It is important to note that it is possible to override any listed parameters with a forcing. This means if a module lists a parameter as required, then it is possible to also provide it as a time-depedent forcing.
 
 The [module implementations](#module-implementations) specify which parameters are required for a given module.
 
@@ -154,11 +176,11 @@ end
 forcing[:longwave_radiation] = FunctionalForcing(lw_rad, RealTime())    ! One forcing for ice surfaces, another for all other surfaces.
 ```
 
-Note that the *behaviour* of a particular forcing is defined internally i.e. whether the forcing is an instantaneous value, like incoming radiation, or an accumulated value, like precipitation.
+Note that the *behaviour* of a particular forcing is defined internally i.e. whether the forcing is an instantaneous value, like incoming radiation, or an accumulated value, like precipitation, and then handled appropriately.
 
 ### Model State
 
-The **Model State** is comprised of two types of variables: **State Variables**
+The **Model State** is comprised of two types of variables: **State Variables** and **Dependent Variables**. State variables are quantities that have an accompanying rate of change. Dependent variables are quantities that are computed using state variables and inputs. 
 The model is designed to be configurable by users from the ground up. The model utilises the classic surface class discretization model utilised in many land models. Specifically, it follows the approach of the Community Land Model, in that there are a small number of distinct overarching surface classes which are defined by the model: **Plant Functional Types (PFTs)**, **Water**, **Urban** and **Ice**. Each of these surface classes encompasses some number of sub-classes, which are created by the user. Each top level class has a fixed set of **traits** that must be specified when the sub-class is declared.
 
 ```
