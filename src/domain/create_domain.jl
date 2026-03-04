@@ -217,13 +217,14 @@ function process_vegetation_area_fractions(vegetation_area_fraction, mapping, ma
 
     # First ensure that the land area fraction and mask are vectorized
     vegetation_area_fraction = reshape(vegetation_area_fraction, (:, size(vegetation_area_fraction, 1)))
+    println(size(vegetation_area_fraction))
     mask = vec(mask)
 
     tiles = (); indices = (); fractions = ()
 
     for (surface_class, mapped_indices) in mapping
         # Summate over the indices assigned to the surface class, then iterate through the non-zero and non-masked fractions
-        class_total = dropdims(sum(@view(vegetation_area_fraction[mapped_indices, :]), dims=2), dims=2)
+        class_total = dropdims(sum(@view(vegetation_area_fraction[:, mapped_indices]), dims=2), dims=2)
         indices_fracs = [(i, frac) for (i, (m, frac)) in enumerate(zip(mask, class_total)) if (m && frac > 0.0)]
 
         tiles = (tiles..., surface_class)

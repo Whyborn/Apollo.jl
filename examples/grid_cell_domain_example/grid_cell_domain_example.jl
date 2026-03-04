@@ -1,22 +1,9 @@
-# Define the surface types
+using Apollo
 
-# Water tiles
-lake = @WaterType Lake
-river = @WaterType River
+include("surface_definition.jl")
 
-water_mapping = Dict(lake => 4,
-                     river => 5)
+ex_size = (17, 9, 17)
 
-# Urban tiles
-residential = @UrbanType Residential
-industrial = @UrbanType Industrial
-
-urban_mapping = Dict(residential => 6,
-                     industrial => 7)
-
-# Ice tiles
-fixed_ice = @IceType FixedIce
-glacier = @IceType Glacier
-
-ice_mapping = Dict(fixed_ice => 8,
-                   glacier => 9)
+fracs = rand(Float64, ex_size)
+lons = collect(LinRange(50, 51, ex_size[1]))
+lats = collect(LinRange(10, 11, ex_size[2]))
