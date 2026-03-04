@@ -1,17 +1,17 @@
 # Not sure what traits a water surface may have yet
 
-const ICE_ALLOWED_TRAITS = Dict()
+const ICE_REQUIRED_TRAITS = Dict()
 
-# The master water surface type
-abstract type IceSurface <: SurfaceType end
+# The master ice surface type
+abstract type IceSurface <: SurfaceClass end
 
 """
     @IceType name, traits
 
 Define a new ice surface, which acts a functional type and subtype of WaterSurface.
 """
-macro IceType(name, ice_traits...)
-    traits = read_surface_traits(ICE_ALLOWED_TRAITS, ice_traits)
+macro IceSurface(name, ice_traits...)
+    traits = read_surface_traits(ICE_REQUIRED_TRAITS, ice_traits)
 
     esc(quote
         struct $(name) <: IceSurface end
@@ -19,4 +19,4 @@ macro IceType(name, ice_traits...)
         $name()
     end)
 end
-export @IceType, IceSurface
+export @IceSurface, IceSurface

@@ -1,17 +1,17 @@
 # Not sure what traits a water surface may have yet
 
-const WATER_ALLOWED_TRAITS = Dict()
+const WATER_REQUIRED_TRAITS = Dict()
 
 # The master water surface type
-abstract type WaterSurface <: SurfaceType end
+abstract type WaterSurface <: SurfaceClass end
 
 """
-    @WaterType name, traits
+    @WaterSurface name, traits
 
 Define a new water surface, which acts a functional type and subtype of WaterSurface.
 """
-macro WaterType(name, water_traits...)
-    traits = read_surface_traits(WATER_ALLOWED_TRAITS, water_traits)
+macro WaterSurface(name, water_traits...)
+    traits = read_surface_traits(WATER_REQUIRED_TRAITS, water_traits)
 
     esc(quote
         struct $(name) <: WaterSurface end
@@ -19,4 +19,4 @@ macro WaterType(name, water_traits...)
         $name()
     end)
 end
-export @WaterType, WaterSurface
+export @WaterSurface, WaterSurface

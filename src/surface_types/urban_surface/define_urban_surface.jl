@@ -1,17 +1,17 @@
 # Not sure what traits an urban surface may have
 
-const URBAN_ALLOWED_TRAITS = Dict()
+const URBAN_REQUIRED_TRAITS = Dict()
 
 # The master urban surface type
-abstract type UrbanSurface <: SurfaceType end
+abstract type UrbanSurface <: SurfaceClass end
 
 """
-    @UrbanType name, traits
+    @UrbanSurface name, traits
 
 Define a new Urban surface, which acts a functional type and subtype of WaterSurface.
 """
-macro UrbanType(name, urban_traits...)
-    traits = read_surface_traits(URBAN_ALLOWED_TRAITS, urban_traits)
+macro UrbanSurface(name, urban_traits...)
+    traits = read_surface_traits(URBAN_REQUIRED_TRAITS, urban_traits)
 
     esc(quote
         struct $(name) <: UrbanSurface end
@@ -19,4 +19,4 @@ macro UrbanType(name, urban_traits...)
         $name()
     end)
 end
-export @UrbanType, UrbanSurface
+export @UrbanSurface, UrbanSurface

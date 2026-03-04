@@ -9,20 +9,26 @@ const PHENOLOGY_TRAITS = Dict(:deciduous => Deciduous(),
                               )
 
 # The set of allowed traits
-const PFT_ALLOWED_TRAITS = Dict(:phenology => PHENOLOGY_TRAITS
+const VEGETATED_REQUIRED_TRAITS = Dict(:phenology => PHENOLOGY_TRAITS
                                 )
 
 # The master VegetationType
-abstract type VegetatedSurface <: SurfaceType end
+abstract type VegetatedSurface <: SurfaceClass end
 
 """
     @PFT name, traits
 
-Define a new PFT, which acts as a functional type and subtype of VegetationType, with
-the specified traits.
+An alias for @VegetatedSurface.
 """
 macro PFT(name, PFT_traits...)
-    traits = read_surface_traits(PFT_ALLOWED_TRAITS, PFT_traits)
+    :(@VegetatedSurface $name $PFT_traits)
+end
+
+"""
+Define a new VegetatedSurface, which acts as a functional type and subtype of VegetatedSurface, with the specified traits.
+"""
+macro VegetatedSurface(name, vegetated_traits...)
+    traits = read_surface_traits(VEGETATED_REQUIRED_TRAITS, vegetated_traits)
 
     esc(quote
         struct $(name) <: VegetatedSurface end
@@ -32,4 +38,4 @@ macro PFT(name, PFT_traits...)
         $name()
     end)
 end
-export @PFT, VegetatedSurface
+export @PFT, @VegetatedSurface, VegetatedSurface

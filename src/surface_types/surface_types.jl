@@ -1,18 +1,21 @@
-abstract type SurfaceType end
+abstract type SurfaceClass end
 
-function read_surface_traits(allowed_traits, passed_traits)
+"""
+Read the surface traits passed, and check they form the complete set of traits required for the class.
+"""
+function read_surface_traits(required_traits, passed_traits)
     traits = Dict()
     for trait_spec in passed_traits
         if trait_spec.head == :(=)
-            if trait_spec.args[1] in keys(allowed_traits)
-                trait_options = allowed_traits[trait_spec.args[1]]
+            if trait_spec.args[1] in keys(required_traits)
+                trait_options = required_traits[trait_spec.args[1]]
                 if trait_spec.args[2] in keys(trait_options)
                     traits[trait_spec.args[1]] = trait_options[trait_spec.args[2]]
                 else
                     @error "$(trait_spec.args[2]) is an unrecognised value for the $(trait_spec.args[1]) trait. Options are $(keys(trait_options))."
                 end
             else
-                @error "$(trait_spec.args[1]) is an unrecognised PFT trait- must be one of $(keys(allowed_traits))"
+                @error "$(trait_spec.args[1]) is an unrecognised PFT trait- must be one of $(keys(required_traits))"
             end
         end
     end
