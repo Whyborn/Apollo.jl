@@ -106,7 +106,7 @@ The process is similar for site simulations, except that the land cover dataset 
 
 ### Model Inputs
 
-There are two classes of inputs to the model: **Parameters** and **Forcing**. Parameters are values that remain the same throughout the simulation. Parameters can be either **SpatialParameters**, defined based on some input array or **TileParameters**, defined based on the current tile.
+There are two classes of inputs to the model: **Parameters** and **Forcing**. The required forcings and parameters are defined on a Parameters are values that remain the same throughout the simulation. Parameters can be either **SpatialParameters**, defined based on some input array or **TileParameters**, defined based on the current tile.
 
 Forcings have both a time and source definition. The time can be either **TrueTime**, which uses the real model time, or **CyclicTime**, which repeated forcing from a specified time period (this includes seasonal forcing). The source can either **FunctionalForcing**, which takes the forcing from a user-defined function, or **FromFileForcing**, which takes forcing from any `CommonDataModel` file.
 
@@ -114,7 +114,7 @@ Forcings have both a time and source definition. The time can be either **TrueTi
 
 ##### Parameters
 
-Each parameter must be specified as either a `SpatialParameter` or a `TileParameter` in the dictionary of parameters used by the model. A `SpatialParameter` takes an array or `CommonDataModel` dataset, with associated variable name as input. The dimensions must be compatible with the size of the domain i.e. either on the same grid as the passed land cover dataset, or have length equal to the number of sites used in a site simulation.
+Each parameter must be specified as either a `SpatialParameter` or a `TileParameter` in the dictionary of parameters used by the model. A `SpatialParameter` takes an array or `CommonDataModel` dataset, with associated variable name as input. The dimensions must be compatible with the size of the domain i.e. either on the same grid as the passed land cover dataset.
 
 ```julia
 params = Dict()

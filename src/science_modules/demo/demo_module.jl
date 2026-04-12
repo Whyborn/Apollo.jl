@@ -16,12 +16,12 @@ Define the required parameters for a generic surface to activate this science mo
 function required_parameters(mod::DemoSoilMoistureModule, surface::SurfaceClass)
     content_at_saturation = DataDefinition(standard_name="volumetric_soil_moisture_content_at_saturation",
                                       units="kg m-3",
-                                      shape=(),
+                                      shape=(:land),
                                       description="Maximum amount of water the soil can hold."
                                      )
     aquifer_drainage = DataDefinition(standard_name="aquifer_drainage",
                                            units="kg m-2 s-1",
-                                           shape=(),
+                                           shape=(:land),
                                            description="Rate at which water drains into the aquifer beneath."
                                           )
 
@@ -39,7 +39,7 @@ function required_parameters(mod::DemoSoilMoistureModule, surface::Union{Vegetat
 
     water_usage = DataDefinition(standard_name="water_usage",
                                      units="kg m-2 s-1",
-                                     shape=(),
+                                     shape=(:tile),
                                      description="Rate at which the water is drained for other usage."
                                     )
 
@@ -68,10 +68,13 @@ end
 Define the state variables required for the DemoSoilMoistureModule for any SurfaceClass.
 """
 function state_variables(mod::DemoSoilMoistureModule, surface::SurfaceClass)
-    # For this simple example, the only state variable will be the soil moisture content.
-    # But this has a different definition for the single layer and multiple layer definitions,
-    # so this isn't actually necessary, only included for demonstration purposes.
-    return Dict()
+    soil_moisture = DataDefinition(standard_name="soil_moisture_content_in_alayer",
+                                   units="kg m-3",
+                                   shape=(:tile, :soil),
+                                   description="Volumetric soil moisture in a soil layer"
+                                  )
+
+    return Dict(:soil_moisture => soil_moisture)
 end
 
 """
