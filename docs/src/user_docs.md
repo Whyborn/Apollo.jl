@@ -102,7 +102,7 @@ sim_science = ScienceDefinition(
         SoilMoistureThermodynamics=SharedMultiLayer(layers=10),
         Canopy=CanopyModel(),
         Urban=SimpleUrban(),
-        Radiantion=TwoBand(),
+        Radiation=TwoBand(),
         Photosynthesis=PhotosynthesisModel
         )
 ```
@@ -111,27 +111,33 @@ sim_science = ScienceDefinition(
 
 Parameters are values which are unchanged through the duration of the simulation. The parameter definitions are prepared in a dictionary, with reserved key names for each parameter. There are two types of parameters:
 
-* `SurfaceSpecificParameter`: A parameter which is may have different values for each specific surface type.
+* `SurfaceSpecificParameter`: A parameter which may have different values for each specific surface type.
 * `SurfaceAgnosticParameter`: A parameter which has the same values for all surface types.
 
-Each of these options takes a function as its constructor argument, with the `SurfaceSpecificParameter` function taking the surface type as its input argument and the `SurfaceAgnosticParameter` taking no input arguments e.g.
+The `SurfaceSpecificParameter` takes an array or NetCDF variable as input, alongside a mapping describing which pages of the array to apply to which surface type. The slowest varying dimension of the array (i.e. the rightmost) is assumed to be the surface slicing dimension. For example, to supply a global map of LAI to the vegetated surfaces, supply an array-like with shape `(nlon, nlat, M)` and a dictionary describing the relationship between the index `M` and the surface types like `Dict(EvergreenBroadleaf => 1, DeciduousBroadleaf => 2, ...)`. Note that is possible to map multiple surface types to the same index. The page of the array will be mapped onto the tile's working array for the parameter.
 
-```julia
-function lai_fn(surface::Union{EvergreenBroadleaf, DeciduousBroadleaf})
-    <return some array for LAI for trees>
-end
+The `SurfaceAgnosticParameter` can take a scalar, array or NetCDF variable as input. The array will be mapped onto the land's working array for the parameter.
 
-function lai_fn(surface::Grass)
-    <return some array for LAI of grass>
-end
+The parameters are added to a dictionary, which is passed to the model initialisation. The keys of the dictionary correspond to specific names for each parameter defined by the science modules. To determine which parameters are required by the model, use `required_parameters(<science_module>)` e.g. to see which parameters are required for the radiation model, use `required_parameters(TwoBand())`. You can also pass a `ScienceDefinition` to dump all the required parameters for all specified implementations.
 
-function albedo_fn()
-    <return some array for surface albedo>
-end
+### Defining the Forcing
 
-parameters[:leaf_area_index] = SurfaceSpecificParameter(lai_fn)
-parameters[:surface_albedo] = SurfaceAgnosticParameter(albedo_fn)
-```
+Forcings are values which change through the duration of the simulation. These can be things that vary at the time step frequency e.g. atmospheric forcing, seasonal frequency e.g. leaf area index, or any other frequency. A forcing can be defined in two ways:
+
+* `DataForcing`: Retrieve the forcing from an external dataset. This can be any dataset which follows the `CommonDataModel` specifications.
+* `FunctionForcing`: Define the forcing using a function, which uses the current time and coordinates to return a scalar at a given space and time.
+
+When using `DataForcing`, the data have the same leading dimensions as the size of the domain (whether that is site or gridded). The timestep will not necessarily be on the model timestep. This means the interpolation method for the dataset must be specified. The possible interpolation options are:
+
+* `Nearest`: Take the nearest value in time.
+* `Linear`: Perform linear interpolation between values.
+* `Previous`: Take the most recent value.
+* `Next`: Take the next value.
+
+It is also necessary to specify what the temporal method of the forcing is, to allow correct handling of the interpolation. For example, precipitation is sometimes reported as a sum over the period, so if the model timestep is half the data timestep, then the precipitation would be effectively doubled if it were treated as a point value. To this end, the type of the forcing can be specified as:
+
+* `Sum`
+* `Point`
 
 
 
