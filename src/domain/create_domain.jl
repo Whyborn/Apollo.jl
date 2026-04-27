@@ -8,7 +8,7 @@ cell-centre coordinates), so the mask has shape `(length(x), length(y))`.
 `x_bnds` and `y_bnds` are `(2, n)` matrices holding the lower and upper
 bounds of each cell along the respective axis.
 """
-struct GriddedMap{T} <: DomainMap
+struct GriddedMap{T} <: DomainMap{T}
     mask::Matrix{Bool}
     x::Vector{T}
     y::Vector{T}
@@ -24,7 +24,7 @@ are paired vectors of the same length `n`, each entry describing one site.
 `mask` is a length-`n` boolean vector. `x_bnds` and `y_bnds` are
 `(2, n)` matrices holding the lower and upper bounds associated with each site.
 """
-struct SiteMap{T} <: DomainMap
+struct SiteMap{T} <: DomainMap{T}
     mask::Vector{Bool}
     x::Vector{T}
     y::Vector{T}
@@ -33,20 +33,26 @@ struct SiteMap{T} <: DomainMap
 end
 
 """
-Domain{T, N, M}
+    TileMap{T, N}
+
+Defines the surface type mapping onto the simulation domain.
+"""
+struct TileMap{T}
+    indices::Vector{Int}
+    fractions::Vector{T}
+end
+
+"""
+Domain{T, N}
 
 Data structure describing the computational domain for the simulation.
 
 """
-struct Domain{T, N, M}
+struct Domain{T, N}
     # The map which describes the mapping from tile vectors back to the original domain.
-    sim_map::DomainMap
+    sim_map::DomainMap{T}
     # Tuple of surface classes used in the simulation
-    tiles::NTuple{N, SurfaceClass}
-    # Tuple of vectors, listing the cells containing the corresponding surface class
-    indices::NTuple{N, Vector{Int}}
-    # Tuple of vectors, describing the fractions of the given cell covered by the surface class
-    fractions::NTuple{N, Vector{T}}
+    tile_map::NTuple{N, Pair{SurfaceClass, TileMap{T}}}
 end
 
 """
@@ -79,9 +85,7 @@ function Domain(x, y, vegetation_area_fraction::Array{T, 3}, mapping; x_bnds=not
         check_bounds_valid(y, y_bnds)
     end
 
-    # If the boolean mask
-    # When creating the mask, we only want to work with the indices representing active surface
-    # types. So cut out a view of those indices from the complete land area fractions
+    # Create the mask based on just the active surfaces
     active_inds = [ind for indices in values(mapping) for ind in indices]
     active_area_fraction = @view(vegetation_area_fraction[:, :, active_inds])
 
@@ -94,25 +98,26 @@ function Domain(x, y, vegetation_area_fraction::Array{T, 3}, mapping; x_bnds=not
         @assert size(mask) == (size(vegetation_area_fraction, 1), size(vegetation_area_fraction, 2)), "Supplied mask does not match the shape of the land area fractions."
     end
 
+    sim_map = GriddedMap{T}(mask, x, y, x_bnds, y_bnds)
+
     # Optionally normalise the fractions
     if normalise
         # Note that this modifies in place, in the variable that is a view into the
         # original array
-        active_area_fraction .= active_area_fraction ./ sum(active_fractions, dims=2)
+        active_area_fraction .= active_area_fraction ./ sum(active_fractions, dims=3)
     end
 
-    # Use the mask and land fractions to yield the index/fraction vectors
-    tiles, indices, fractions = process_vegetation_area_fractions(vegetation_area_fraction, mapping, mask)
-    
-    # Vectorize the dimensions
-    x = repeat(x, inner=length(y), outer=1)
-    y = repeat(y, inner=1, outer=length(x))
-    x_bnds = repeat(x_bnds, inner=(1, length(y)), outer=(1, 1))
-    y_bnds = repeat(y_bnds, inner=(1, 1), outer=(1, length(x)))
+    # Now iterate through each of the surfaces and create the tile map
+    tile_map = Tuple(begin
+                    fracs_for_surface = dropdims(sum(vegetation_area_fraction[:, :, pages], dims=3), dims=3)
+                    mask_for_surface = @. !ismissing(fracs_for_surface) && fracs_for_surface > 0.0
+                    surface_inds = [ind for (ind, m) in enumerate(mask_for_surface) if m]
+                    fracs = fracs_for_surface[surface_inds]
+                    surface => TileMap(surface_inds, fracs)
+                end for (surface, pages) in pairs(mapping)
+               )
 
-    # Call the generic function used for both domain types
-    Domain{eltype(vegetation_area_fraction), length(tiles), 2}(mask, x, y, x_bnds, y_bnds, tiles, indices, fractions)
-
+    Domain{T, length(tile_map)}(sim_map, tile_map)
 end
 
 """
@@ -158,6 +163,8 @@ function Domain(x, y, vegetation_area_fraction::Matrix{T}, mapping; x_bnds=nothi
         @assert length(mask) == size(vegetation_area_fraction, 1) "Supplied mask does not match the size of the vegetation_area_fraction."
     end
 
+    sim_map = SiteMap(mask, x, y, x_bnds, y_bnds)
+
     # Optionally normalise the fractions
     if normalise
         # Note that this modifies in place, in the variable that is a view into the
@@ -165,12 +172,17 @@ function Domain(x, y, vegetation_area_fraction::Matrix{T}, mapping; x_bnds=nothi
         active_fractions .= active_area_fraction ./ sum(active_area_fraction, dims=2)
     end
 
-    # Now create the vectors for the respective surface classes
-    tiles, indices, fractions = process_vegetation_area_fractions_and_mapping(vegetation_area_fraction, mapping, vec(mask))
+    # Now iterate through each of the surfaces and create the tile map
+    tile_map = Tuple(begin
+                    fracs_for_surface = dropdims(sum(vegetation_area_fraction[:, :, pages], dims=2), dims=2)
+                    mask_for_surface = @. !ismissing(fracs_for_surface) && fracs_for_surface > 0.0
+                    surface_inds = [ind for (ind, m) in enumerate(mask_for_surface) if m]
+                    fracs = fracs_for_surface[surface_inds]
+                    surface => TileMap(surface_inds, fracs)
+                end for (surface, pages) in pairs(mapping)
+               )
 
-    # Call the generic function used for both domain types
-    Domain{eltype(vegetation_area_fraction), length(tiles), 1}(mask, x, y, x_bnds, y_bnds, tiles, indices, fractions)
-
+    Domain{T, length(tile_map)}(sim_map, tile_map)
 end
 
 """
@@ -244,31 +256,6 @@ Validate that the bounds are appropriate for the specified longitudes
 """
 function check_bounds_valid(points, point_bnds)
     @assert all(@view(point_bnds[1, :]) .< points .< @view(point_bnds[2, :])) "Some bounds are do not bracket their associated point."
-end
-
-"""
-Process the given land area fractions and the mapping to create the `tile`, `indices` and `fractions` components of the `Domain` derived type.
-"""
-function process_vegetation_area_fractions(vegetation_area_fraction, mapping, mask)
-
-    # First ensure that the land area fraction and mask are vectorized
-    vegetation_area_fraction = reshape(vegetation_area_fraction, (:, size(vegetation_area_fraction, 1)))
-    println(size(vegetation_area_fraction))
-    mask = vec(mask)
-
-    tiles = (); indices = (); fractions = ()
-
-    for (surface_class, mapped_indices) in mapping
-        # Summate over the indices assigned to the surface class, then iterate through the non-zero and non-masked fractions
-        class_total = dropdims(sum(@view(vegetation_area_fraction[:, mapped_indices]), dims=2), dims=2)
-        indices_fracs = [(i, frac) for (i, (m, frac)) in enumerate(zip(mask, class_total)) if (m && frac > 0.0)]
-
-        tiles = (tiles..., surface_class)
-        indices = (indices..., getindex.(indices_fracs, 1))
-        fractions = (fractions..., getindex.(indices_fracs, 2))
-    end
-
-    tiles, indices, fractions
 end
 
 """

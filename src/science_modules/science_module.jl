@@ -6,6 +6,8 @@ The top level science module type, which acts as a fallback when methods are not
 abstract type ScienceModule end
 
 # Define all the generic fallback methods. Most of these are methods that *must* be defined by the actual implementations, so throw errors if they ever reach the generic methods.
+
+# Note that all of these methods take the implementation as an argument, which means the return values can be modified based on the specifics of the implementation e.g. an implementation may provide choices about some sub-section of the implementation, from different sources. The references may contain logic to return different references depending on this choice.
 """
     define_dimensions(dims, mod::ScienceModule, surface::SurfaceClass)
 
@@ -54,73 +56,65 @@ function dependent_variables(mod::ScienceModule, surface::SurfaceClass)
 end
 
 """
-    (mod::ScienceModule)(state_vars, update, dep_vars, parameters, forcing, domain)
+    (mod::ScienceModule)(surface::SurfaceClass, state_vars, update, dep_vars, parameters, forcing, domain)
 
 Fallback callable for the given implementation. This should update variables in the `update` and `dep_vars` arrays.
 """
-function (mod::ScienceModule)(state_vars, update, dep_vars, parameters, forcing, domain)
-    msg = "The implementation $(typeof(mod)) has not defined its callable. Every implementation must define its callable with `function(mod::<Implementation>)(state_vars, update, dep_vars, parameters, forcing, domain)`."
+function (mod::ScienceModule)(surface::SurfaceClass, state_vars, update, dep_vars, parameters, forcing, domain)
+    msg = "The implementation $(typeof(mod)) has not defined its callable. Every implementation must define its callable with `function(mod::<Implementation>)(surface, state_vars, update, dep_vars, parameters, forcing, domain)`."
     error(msg)
 end
 
 # Now metadata definitions, to assist with inspection of the implementations.
 
 """
-    description(mod::ScienceModule)
+    description(mod::ScienceModule, surface::SurfaceClass)
 
 Fallback method for the implementation description. An implementation must define a description, so this throws an error.
 """
-function description(mod::ScienceModule)
+function description(mod::ScienceModule, surface::SurfaceClass)
     msg = "The implementation $(typeof(mod)) has not provided a description. Every implementation must define a description."
     error(msg)
 end
 
 """
-    authors(mod::ScienceModule)
+    authors(mod::ScienceModule, surface::SurfaceClass)
 
 Return the authors of the given implementation. `details` is a set of author strings or author => contact pairs.
 """
-authors(mod::ScienceModule) = ("No authors provided",)
+authors(mod::ScienceModule, surface::SurfaceClass) = ("No authors provided.",)
 
 """
-    citation(mod::ScienceModule)
+    citation(mod::ScienceModule, surface::SurfaceClass)
 
-Return the Digital Object Identifier (DOI) associated with this implementation. Intended to capture the publication associated with the developing and testing of the implementation. Use references(mod) to list the existing works that the implementation is based on.
+Return the Digital Object Identifier (DOI) associated with this implementation. Intended to capture the publication associated with the developing and testing of the implementation. May be multiple citations if the implementation was extended. Use references(mod) to list the existing works that the implementation is based on.
 """
-citation(mod::ScienceModule) = "No citation provided."
+citation(mod::ScienceModule, surface::SurfaceClass) = ("No citation provided.",)
 
 """
-    references(mod::ScienceModule)
+    references(mod::ScienceModule, surface::SurfaceClass)
 
 Return the DOI(s) which the implementation is based on. Use citation(mod) to provide the publication describing the implementation, if it is a new formulation.
 """
-references(mod::ScienceModule) = ["No references provided."]
+references(mod::ScienceModule, surface::SurfaceClass) = ("No references provided.",)
 
 """
-    show(io, mime::MIME"text/plain", obj::ScienceModule)
+    info(mod::ScienceModule, surface::SurfaceClass)
 
-Provide a detailed description of the module.
+Print all the information about the implementation.
 """
-function show(io, mime::MIME"text/plain", mod::ScienceModule)
-    show(io, mod)
-end
-
-function show(io, mod::ScienceModule)
-    print(io, "$(supertype(obj)) implementation: $(typeof(mod))\n\n")
-    print(io, "Description:\n$(description(mod))\n\n")
-    print(io, "Authors:\n")
-    for author in authors(mod)
-        if author isa pair
-            name, email = author
-            print(io, "\t$(name), contact: $(email)\n")
-        elseif author isa String
-            print(io, "\t$(name)\n")
-        else
-            error("Invalid return signature for authors(mod::$(typeof(mod))). Must be an iterable of String or String => String pairs.")
-        end
+function info(mod::ScienceModule, surface::SurfaceClass)
+    print("$(supertype(obj)) implementation: $(typeof(mod))\n\n")
+    print("Description:\n$(description(mod, surface))\n\n")
+    print("Authors:\n")
+    for author in authors(mod, surface)
+        print("\t$(name)\n")
     end
-    print(io, "\n")
-    print(io, "Citation: $(citation(mod))\n")
+    print("\n")
+    print("Citations:\n")
+    for doi in citation(mod, surface)
+        print("\t$(citation)\n")
+    end
     print(io, "References:\n")
     for reference in references(mod)
         print(io, "\t$(reference)\n")

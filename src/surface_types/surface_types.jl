@@ -23,6 +23,16 @@ function read_surface_traits(required_traits, passed_traits)
     traits
 end
 
+function print_required_traits(required_traits)
+    for trait, values in pairs(required_traits)
+        println("\t$(String(trait)) with options:")
+        for trait_values in keys(values)
+            println("\t -\t$(String(trait_values))")
+        end
+    end
+end
+
+include("barren_surface/barren_surface.jl")
 include("ice_surface/ice_surface.jl")
 include("urban_surface/urban_surface.jl")
 include("vegetated_surface/vegetated_surface.jl")

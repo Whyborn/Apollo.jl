@@ -64,7 +64,7 @@ egbl = @VegetatedSurface EvergreenBroadleaf phenology=evergreen stems=woody
 To inspect the traits required for a given surface type, use:
 
 ```julia
-required_traits(::SurfaceType)
+required_traits(<surface_type>)
 ```
 
 We will construct an example (with nonsense values) to demonstrate how to construct a simulation. Include some basic surface types:
@@ -128,16 +128,16 @@ required_modules(UrbanCanopyModel, UrbanSurface)
 Each implementation is required to define a series of metadata methods:
 
 * `description`: A scientific description of the implementation. Should include all equations used and a text desciption.
-* `author`: A list of authors for the implementation. May include contact details of the author so chooses.
+* `authors`: A list of authors for the implementation. May include contact details of the author so chooses.
 * `references`: A list of DOIs listing the publications used for the development of the implementation. May be empty if it is a novel implementation, in which case the `publication` should provide a DOI.
-* `publication`: Reference publication DOI for the implementation. May be empty if the implementation comes from an existing work.
+* `citation`: Reference publication DOI for the implementation. May be empty if the implementation comes from an existing work.
 * `info`: Combination of all the above methods- prints the description, author, references and publication.
 
 Note that both `references` and `publication` may be provided if the implementation is based on a previous work, with some novelties/improvements. Each of these can be called with the implementation and the surface type as an argument e.g.
 
 ```
 description(VegetatedCanopyModel, VegetatedSurface)
-author(VegetatedCanopyModel, UrbanSurface)
+authors(VegetatedCanopyModel, UrbanSurface)
 ...
 ```
 
@@ -150,9 +150,14 @@ Parameters are values which are unchanged through the duration of the simulation
 * Surface specific parameters: A parameter which may have different values for each specific surface type.
 * Surface agnostic parameters: A parameter which has the same values for all surface types (either per grid cell or globally).
 
-Both are constructed using the `Parameter` interface, with the difference being the inclusion of a `mapping` dictionary for surface specific parameters. The first input to the `Parameter` is always the source data. This can be a scalar, an array or any `CommonDataModel` variable. For surface agnostic parameters, this is the only input, while for surface specific parameters, an additional mapping dictionary is required, which maps the pages of the array to specific surface types.
+The difference between the two parameter types is the inclusion of a `mapping` to the surface specific parameter constructor, which informs which elements of the parameter to assign to which surface type.
 
-The way in which the passed data is treated is inferred based off the dimensionality of the array. For surface agnostic variables, it is assumed that the "trailing" dimensions i.e. right-most and slowest varying, represent the spatial dimensions, either `(nlon, nlat)` or `(nsite)` *if there is a spatial dependence*. The leading dimensions are assumed to be the shape of the local parameter e.g. number of soil layers.
+To assist in constructing the parameter arrays, there are two ways of defining the parameters: with `HomogeneousParameter`, meaning the value of parameter is the same everwhere in space, or `HeterogeneousParameter`, meaning the value of the parameter varies in space. Both constructions allow for parameters which are array valued on a given surface grid cell e.g. fractions of roots in each soil layer.
+
+This means that the data supplied for surface specific parameters is *always* an array- it must have at least one dimension for the surface types. The rules defining the dimensionality of parameters are are:
+
+* Surface specific parameters are ordered as `(<local dimensions>, <spatial dimensions>, <surface dimension>)` where applicable e.g. a homogeneous parameter defined on soil layers would have dimension `(n_soil_layers, n_surfaces)`, while a heterogeneous parameter that is singular on each grid cell would have dimension `(nlon, nlat, n_surfaces)` (or `(n_sites, n_surfaces)` for a site simulation).
+* Surface agnostic parameters behave in the same way, with the removal of the trailing `<surface dimension>`.
 
 To demonstrate, consider a 1 degree global simulation, with `(nlon=360, nlat=180)`. If a parameter is specified with an array of shape `(360, 180)`, it's assumed that each grid cell gets a scalar value. If a parameter is specified with an array of shape `(6, 360, 180)`, it's assumed that each grid cell gets an array of shape `(6,)`. If it's specified with an array of shape `(6, 180)`, then it's assumed that each grid cell gets *the same array of shape `(6, 180)`*, since the trailing dimensions don't match the spatial domain.
 
@@ -162,23 +167,23 @@ The parameters are specified in a dictionary which is then passed to the simulat
 
 ```julia
 # A surface agnostic parameter
-parameters[:gravity] = Parameter(9.81)                  # Constant value everywhere
+parameters[:gravity] = HomogeneousParameterValue(9.81)                  # Constant value everywhere
 
 # A surface agnostic spatially varying parameter
-parameters[:surface_albedo] = Parameter(albedo_array)   # albedo_array is a (360, 180) size array, so different value on each grid cell
+parameters[:surface_albedo] = HeterogeneousParameterValue(albedo_array)   # albedo_array is a (360, 180) size array, so different value on each grid cell
 
 # Surface specific parameter, constant everywhere for each surface
 param_mapping = Dict(EvergreenBroadleaf => 1, C3Grass => 2)
-parameters[:max_carboxylation_rate] = Parameter(vcmax_values, mapping)    # A vector of length >= 2, with first value applied to EGBL and second to C3 grass.
+parameters[:max_carboxylation_rate] = HomogeneousParameterValue(vcmax_values, mapping)    # A vector of length >= 2, with first value applied to EGBL and second to C3 grass.
 
 # Surface specific parameter, spatially varying
-parameters[:leaf_area_index] = Parameter(lai_array, mapping)    # lai_array is a (360, 180, M) array with M >= 2, with lai_array[:, :, 1] applied to EGBL etc.
+parameters[:leaf_area_index] = HeterogeneousParameterValue(lai_array, mapping)    # lai_array is a (360, 180, M) array with M >= 2, with lai_array[:, :, 1] applied to EGBL etc.
 
 # Surface specific parameter, constant in space but array valued
-parameters[:root_fraction_in_layer] = Parameter(root_fracs, mapping)    # root_fracs is a (N, M) array with N = number of soil layers and M >= 2. EGBL gets [:, 1] etc.
+parameters[:root_fraction_in_layer] = HomogeneousParameterValue(root_fracs, mapping)    # root_fracs is a (N, M) array with N = number of soil layers and M >= 2. EGBL gets [:, 1] etc.
 ```
 
-In each of these instances, the array may be replaced with any `CommonDataModel` variable e.g. NetCDF, Zarr, GRIB, see [CommonDataModel](github.com/JuliaGeo/CommonDataModel.jl).
+In each of these instances, the data may be replaced with any `CommonDataModel` variable e.g. NetCDF, Zarr, GRIB, see [CommonDataModel](github.com/JuliaGeo/CommonDataModel.jl).
 
 The parameters required by the model are defined by the constituent implementations in the `ScienceDefinition`. Use `required_parameters` to show which parameters are required for a given implementation. It will show the parameter desciption, the units and the expected data size of the parameter.
 

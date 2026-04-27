@@ -6,9 +6,9 @@ const ICE_REQUIRED_TRAITS = Dict()
 abstract type IceSurface <: SurfaceClass end
 
 """
-    @IceType name, traits
+    @IceSurface name, traits
 
-Define a new ice surface, which acts a functional type and subtype of WaterSurface.
+Define a new ice surface, which acts a functional type and subtype of IceSurface.
 """
 macro IceSurface(name, ice_traits...)
     traits = read_surface_traits(ICE_REQUIRED_TRAITS, ice_traits)

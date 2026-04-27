@@ -8,8 +8,18 @@ const PHENOLOGY_TRAITS = Dict(:deciduous => Deciduous(),
                               :evergreen => Evergreen()
                               )
 
+abstract type StemType end
+
+struct Woody <: StemType end
+struct Herbaceous <: StemType end
+
+const STEM_TRAITS = Dict(:woody => Woody(),
+                         :herbaceous => Herbaceous()
+                        )
+
 # The set of allowed traits
-const VEGETATED_REQUIRED_TRAITS = Dict(:phenology => PHENOLOGY_TRAITS
+const VEGETATED_REQUIRED_TRAITS = Dict(:phenology => PHENOLOGY_TRAITS,
+                                       :stems => STEM_TRAITS
                                 )
 
 # The master VegetationType
