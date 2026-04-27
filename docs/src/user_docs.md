@@ -119,6 +119,12 @@ sim_science = ScienceDefinition(
 
 In this instance, the soil moisture and thermodynamics as well as radiation utilise the same implementation for all of the surface classes. Note that this does *not* necessarily mean they are using an identical set of equations- it is possible for a given implementation to specify different behaviour for different classes. The canopy and photosynthesis have specified implementations for the `VegetatedSurface` and `Urban` surface classes- any surface classes not specified for a given science module will use the `NullImplementation`, which does nothing.
 
+Some implementations may require other science modules to be active to operate e.g. an implementation of fire may require a tree demography model to be active for it to be meaningful. Note that an implementation can only require a module to be active for the given surface type, it cannot require a specific implementation of that module. To see what modules a given implementation requires, use `required_modules` with the implementation and surface type as arguments e.g.
+
+```julia
+required_modules(UrbanCanopyModel, UrbanSurface)
+```
+
 Each implementation is required to define a series of metadata methods:
 
 * `description`: A scientific description of the implementation. Should include all equations used and a text desciption.
@@ -127,13 +133,15 @@ Each implementation is required to define a series of metadata methods:
 * `publication`: Reference publication DOI for the implementation. May be empty if the implementation comes from an existing work.
 * `info`: Combination of all the above methods- prints the description, author, references and publication.
 
-Note that both `references` and `publication` may be provided if the implementation is based on a previous work, with some novelties/improvements. Each of these can be called with the implementation as an argument e.g.
+Note that both `references` and `publication` may be provided if the implementation is based on a previous work, with some novelties/improvements. Each of these can be called with the implementation and the surface type as an argument e.g.
 
 ```
-description(VegetatedCanopyModel)
-author(VegetatedCanopyModel)
+description(VegetatedCanopyModel, VegetatedSurface)
+author(VegetatedCanopyModel, UrbanSurface)
 ...
 ```
+
+Note that all the implementations define their metadata and introspection methods with the `(implementation, surface_class)` signature, even if the implementation is only active for a single surface type. This is to permit generic behaviour within the model.
 
 ### Defining the Parameters
 
@@ -175,7 +183,7 @@ In each of these instances, the array may be replaced with any `CommonDataModel`
 The parameters required by the model are defined by the constituent implementations in the `ScienceDefinition`. Use `required_parameters` to show which parameters are required for a given implementation. It will show the parameter desciption, the units and the expected data size of the parameter.
 
 ```julia
-required_parameters(VegetatedCanopyModel())
+required_parameters(VegetatedCanopyModel, VegetatedSurface)
 ```
 
 ### Defining the Forcing
@@ -201,7 +209,7 @@ It is also necessary to specify what the temporal method of the forcing is to al
 The time period for the forcing can be set as either `RealTime`, which uses the actual simulation time for indexing, or `CyclicTime`, which recycles a specific period e.g. for spinning up a simulation. A `RealTime` forcing takes no arguments, while a `CyclicTime` forcing takes a start date and a period as arguments. The forcings required by the model are defined by the constituent implementations in the `ScienceDefinition`. Use `required_forcings` to show which parameters are required for a given implementation.
 
 ```julia
-required_forcing(TwoBandRadiation())
+required_forcing(TwoBandRadiation, IceSurface)
 ```
 
 #### Data Forcing
@@ -273,11 +281,40 @@ It is always possible to *upgrade* a parameter to a forcing. Any parameter requi
 
 ### Output
 
-The model output is comprised of 2 concepts: `Sources` and `Streams`. The sources specify what the output data is, the streams define where the data goes.
+The model output is comprised of 2 concepts: `OutputStream`s and `OutputSource`s. The sources specify what the output data is, the streams define where the data goes.
+
+#### Streams
+
+Streams represent NetCDF files that are to be written to. Any number of sources can be directed to a single stream, with the only rules being that two sources with the same `name` cannot be directed to the same stream, and `Point` sources cannot be directed to the same stream as other methods. This is because conventionally the other methods use the centre time of the interval as the representative time, rather than the end of the interval, and multiple time dimensions in a file is not desirable. An `OutputStream` is defined by:
+
+* `name`: The name of the stream. Corresponds to the `stream` entry in the `Source` definition.
+* `frequency`: The frequency of writing to the file. Must be a `Period` which is a multiple of the timestep.
+* `file_name`: The name of the NetCDF file to write. Defaults to "<name>.nc".
+* `attrs`: Any other NetCDF attributes to apply.
+
+```julia
+# Stream written to at the end of each day
+stream_daily = OutputStream(
+    name="daily_freq",
+    frequency=Period(Day(1)),
+    file_name="daily.nc",
+    attrs=Dict(
+        "simulation" => "Demonstration simulation",
+        "author => "Lachlan Whyborn",
+        )
+    )
+
+# Stream written to at the end of each month
+stream_monthly = OutputStream(
+    name="monthly",
+    frequency=Period(Month(1)),
+    file_name="monthly.nc",
+    )
+```
 
 #### Sources
 
-Any piece of data referenceable within the model forcing, state or derived data is a valid target for a data source. Parameters are not included as they are constant in time, and should be trivially retrievable by the user in pre or post processing. A `Source` is defined by:
+Any piece of data referenceable within the model forcing, state or derived data is a valid target for a data source. Parameters are not included as they are constant in time, and should be trivially retrievable by the user in pre or post processing. An `OutputSource` is defined by:
 
 * `target`: The target variable to source the data from.
 * `stream`: The stream to write the variable to.
@@ -290,13 +327,63 @@ Any piece of data referenceable within the model forcing, state or derived data 
 * `name`: The NetCDF variable name to use. Defaults to `target` if not specified.
 * `attrs`: Any other NetCDF variable attributes to apply.
 
-It is possible to provide a vector of variables as a `target` to simplify the `Source` specification. Note that if the same variable is to be written to multiple streams, it must be done with separate `Source` definitions. This was a design decision made to improve clarity and simplify internal handling.
+The appropriate units will be applied to the variable by inspecting the internal representation of the `target`, and the appropriate time method will be applied based on the `method`. It is possible to provide a vector of variables as a `target` to simplify the `Source` specification. Note that if the same variable is to be written to multiple streams, it must be done with separate `Source` definitions. This was a design decision made to improve clarity and simplify internal handling.
 
-#### Streams
+```julia
+# Write daily mean soil moisture content to the daily output stream
+moisture_output = OutputSource(
+    target="soil_moisture_content_in_a_layer",
+    stream="daily_freq",
+    method="mean",
+    )
 
-Streams represent NetCDF files that are to be written to. Any number of sources can be directed to a single stream, with the only rule being that two sources with the same `name` cannot be directed to the same stream. A `Stream` is defined by:
+# Write monthly max carbon pools to the monthly output stream
+carbon_outputs = OutputSource(
+    target=["labile_carbon", "leaf_carbon_content", "stem_carbon_content", "soil_carbon_content"],
+    stream="monthly",
+    method="max"
+    )
 
-* `name`: The name of the stream. Corresponds to the `stream` entry in the `Source` definition.
-* `frequency`: The frequency of writing to the file. Must be a `Period` which is a multiple of the timestep.
-* `file_name`: The name of the NetCDF file to write. Defaults to "<name>.nc".
-* `attrs`: Any other NetCDF attributes to apply.
+# Write sum of evapotranspiration over each day
+evapotrans = OutputSource(
+    target="evapotranspiration",
+    stream="daily_freq",
+    method="sum"
+    )
+```
+
+The output is then specified by:
+
+```
+outputs = OutputDefinition(streams=[stream_daily, stream_monthly], sources=[moisture_output, carbon_outputs, evapotrans])
+```
+
+The output can also be specified via JSON file, with the streams defined in a `streams` block and sources in a `sources` block like:
+
+```json
+{
+    streams: {
+        
+```
+
+### Monitoring the Simulation
+
+The simulation can be set up with a monitoring system. This writes sections of the model state to disk at specific intervals, only keeping a small number of snapshots, erasing older snapshots. Any number of `Monitor`s can be set up for a simulation. To setup a `Monitor`, it requires:
+
+* `name`: The name of monitor, used to name the directory containing the monitor outputs.
+* `frequency`: A `Period` describing how often the monitor should be written.
+* `num_snapshots`: How many snapshots to keep.
+* `variables`: A tuple of either `<variable_name>` or `<surface_type> => <variable_name>` pairs, denoting which variables to include. If the entry is a singular `<variable_name>`, then that variable is taken from all surfaces, otherwise the variable is only taken from that specific surface.
+
+The snapshots are stored in JLD2 format, with the data being saved as `Dict{Type{SurfaceType}, Array{T}}` under the variable names. Note that only the grid points active for a specific surface type are included, so the data is typically in vector format. When a simulation begins, it writes a serialisation of the simulation setup to disk, which can be used in associated with the monitor outputs to visualise the simulation in situ. An example monitor may look like:
+
+```julia
+monitor_1 = Monitor(
+    name="base_monitor",
+    frequency=Period(Hour(1)),
+    num_snapshots=5,
+    variables=("outgoing_shortwave_radiation", EvergreenBroadleaf => "evaporation", C3Grass => "transpiration")
+    )
+```
+
+This monitor would write out the outgoing shortwave radiation on all surfaces, the evaporation on the `EvergreenBroadleaf` surface and the transpiration on the `C3Grass` surface every hour, keeping only 5 snapshots. The snapshots would be written to the `base_monitor` directory, with names `snapshot_001`, `snapshot_002` and so on.
