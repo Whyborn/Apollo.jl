@@ -34,5 +34,18 @@ function check_data_meta(internal_name, data_kwargs)
     data_kwargs["dimensions"] = get(data_kwargs, "dimensions", ())
 end
 
+"""
+    add_model_dimension!(model_dims, new_dim, dim_size)
+
+Add the model dimension with the name `new_dim` with length `dim_size` to the model dimensions.
+"""
+function add_model_dimension!(model_dims, new_dim, dim_size)
+    if haskey(model_dims, new_dim) && model_dims[new_dim] != dim_size
+        error("The dimension $(new_dim) has conflicting sizes: $(dim_size) vs $(model_dims[new_dim])")
+    end
+
+    model_dims[new_dim] = dim_size
+end
+
 include("parameters/parameter.jl")
 
