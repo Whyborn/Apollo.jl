@@ -1,22 +1,24 @@
 """
-    check_data_meta(kwargs)
+    check_data_meta(internal_name, data_kwargs)
 
-Upon construction of any internal data, some metadata must be supplied at the call site. This function makes sure the required metadata is specified, and gives default values to any that aren't.
+Ensures that the metadata attached to the `internal_name` data, contained in `data_kwargs`, is valid.
+
+Valid metadata contains `standard_name`, `units` and `description`. Optional entries are `long_name` and `dimensions`, which are assigned default values of `"no long_name supplied"` and `()` respectively if they are not defined.
 """
-function check_data_meta(internal_name, kwargs)
+function check_data_meta(internal_name, data_kwargs)
     bad_meta = false
     err_msgs = String[]
-    if !haskey(kwargs, "standard_name")
+    if !haskey(data_kwargs, "standard_name")
         push!(err_msgs, "No standard name supplied.")
         bad_meta = true
     end
 
-    if !haskey(kwargs, "units")
+    if !haskey(data_kwargs, "units")
         push!(err_msgs, "No units supplied.")
         bad_meta = true
     end
 
-    if !haskey(kwargs, "description")
+    if !haskey(data_kwargs, "description")
         push!(err_msgs, "No description supplied.")
         bad_meta = true
     end
@@ -28,8 +30,8 @@ function check_data_meta(internal_name, kwargs)
         end
     end
 
-    kwargs["long_name"] = get(kwargs, "long_name", "no long_name supplied")
-    kwargs["dimensions"] = get(kwargs, "dimensions", ())
+    data_kwargs["long_name"] = get(data_kwargs, "long_name", "no long_name supplied")
+    data_kwargs["dimensions"] = get(data_kwargs, "dimensions", ())
 end
 
 include("parameters/parameter.jl")
