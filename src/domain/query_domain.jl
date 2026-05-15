@@ -1,15 +1,19 @@
 """
-Return the indices associated with a specified surface.
+    surface_indices(surface, domain)
+
+Return the global indices associated with a specified surface.
 """
-function tile_indices(domain, surface)
-    surface_id = findfirst(domain.tiles .== surface)
-    domain.indices[surface_id]
+function surface_indices(surface, domain)
+    domain_for_surface = get_surface_domain(surface, domain)
+    domain_for_surface.inds
 end
 
 """
-Return the coordinates associated with a specified surface.
+    get_surface_domain(surface, domain)
+
+Return the domain for the specific surface.
 """
-function tile_coords(domain, surface)
-    surface_indices = tile_indices(domain, surface)
-    [(domain.mask.x[i], domain.mask.y[i]) for i in surface_indices]
+function get_surface_domain(surface, domain)
+    i = findfirst(first.(domain.tile_map) .== surface)
+    domain.tile_map[i].second
 end
