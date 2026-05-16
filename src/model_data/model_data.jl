@@ -39,12 +39,14 @@ end
 
 Add the model dimension with the name `new_dim` with length `dim_size` to the model dimensions.
 """
-function add_model_dimension!(model_dims, new_dim, dim_size)
-    if haskey(model_dims, new_dim) && model_dims[new_dim] != dim_size
-        error("The dimension $(new_dim) has conflicting sizes: $(dim_size) vs $(model_dims[new_dim])")
-    end
+function add_model_dimension!(model_dims, science_module, surface)
+    for new_dim in dimensions(science_module, surface)
+        if haskey(model_dims, new_dim) && model_dims[new_dim] != dim_size
+            error("The dimension $(new_dim) has conflicting sizes: $(dim_size) vs $(model_dims[new_dim])")
+        end
 
-    model_dims[new_dim] = dim_size
+        model_dims[new_dim] = dim_size
+    end
 end
 
 include("parameters/parameter.jl")
